@@ -16,6 +16,10 @@ status_label = None
 progress_bar = None
 painel = None
 
+# Criando janela principal do Tkinter
+root = tk.Tk()
+root.withdraw()  # Oculta a janela principal até que seja necessário
+
 def selecionar_origem():
     global source_dir
     source_dir = filedialog.askdirectory()
@@ -31,15 +35,20 @@ def selecionar_destino():
 def configurar_backup():
     global backup_time, backup_status, painel
     backup_time = horario_entry.get()
+    
     if not source_dir or not backup_zip_dir or not backup_time:
         messagebox.showerror("Erro", "Todos os campos devem ser preenchidos!")
         return
+    
     os.makedirs(backup_zip_dir, exist_ok=True)
     schedule.clear()
     schedule.every().day.at(backup_time).do(realizar_backup)
+
     backup_status = f"Backup agendado para {backup_time}!"
     messagebox.showinfo("Sucesso", backup_status)
-    painel.destroy()
+    
+    if painel:
+        painel.destroy()
     abrir_painel_status()
 
 def iniciar_backup():
@@ -47,13 +56,17 @@ def iniciar_backup():
     if not source_dir or not backup_zip_dir:
         messagebox.showerror("Erro", "Configure os diretórios primeiro!")
         return
-    painel.destroy()
+    
+    if painel:
+        painel.destroy()
     abrir_painel_status()
-    threading.Thread(target=realizar_backup).start()
+    
+    threading.Thread(target=realizar_backup, daemon=True).start()
 
 def realizar_backup():
     global backup_status
     atualizar_status("Backup em andamento...")
+    
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     backup_zip_path = os.path.join(backup_zip_dir, f"backup_{timestamp}.zip")
     os.makedirs(backup_zip_dir, exist_ok=True)
@@ -71,12 +84,25 @@ def realizar_backup():
             status_label.config(text=f"Processando {i+1}/{total_files} arquivos...")
             status_label.update()
     
-    atualizar_status("Backup concluído com sucesso!")
     manter_apenas_tres_backups()
+    
+    # Salvar log do backup
+    salvar_log(f"Backup concluído: {backup_zip_path}")
+
+    # Mostrar mensagem de sucesso por 5 segundos antes de restaurar o status
+    atualizar_status("Backup concluído com sucesso!")
+    
+    # Resetar a barra de progresso após 5 segundos e restaurar o status
+    painel.after(5000, lambda: resetar_interface())
+
+def resetar_interface():
+    progress_bar['value'] = 0  # Reseta a barra de progresso
+    atualizar_status(f"Backup agendado para {backup_time}")  # Restaura o status original
 
 def atualizar_status(novo_status):
-    status_label.config(text=novo_status)
-    status_label.update()
+    if status_label:
+        status_label.config(text=novo_status)
+        status_label.update()
 
 def manter_apenas_tres_backups():
     backup_files = sorted(
@@ -88,6 +114,11 @@ def manter_apenas_tres_backups():
         old_backup = os.path.join(backup_zip_dir, backup_files.pop())
         os.remove(old_backup)
 
+def salvar_log(mensagem):
+    log_path = os.path.join(backup_zip_dir, "backup_log.txt")  # Caminho do log na pasta de backup
+    with open(log_path, "a") as log_file:  # Abre o arquivo no modo "append" para não sobrescrever
+        log_file.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {mensagem}\n")
+
 def executar_agendador():
     while True:
         schedule.run_pending()
@@ -95,18 +126,19 @@ def executar_agendador():
 
 def abrir_painel_status():
     global status_label, progress_bar, painel
-    painel = tk.Tk()
+    painel = tk.Toplevel()
     painel.title("Status do Backup")
     painel.geometry("400x200")
+    
     status_label = tk.Label(painel, text=backup_status, font=("Arial", 12))
     status_label.pack(pady=10)
+    
     progress_bar = ttk.Progressbar(painel, orient="horizontal", length=300, mode="determinate")
     progress_bar.pack(pady=10)
-    painel.mainloop()
 
 def abrir_painel_configuracao():
     global painel, origem_entry, destino_entry, horario_entry
-    painel = tk.Tk()
+    painel = tk.Toplevel()
     painel.title("Painel de Backup")
     painel.geometry("400x300")
     
@@ -128,6 +160,9 @@ def abrir_painel_configuracao():
     tk.Button(painel, text="Iniciar Backup Agora", command=iniciar_backup).pack()
     
     threading.Thread(target=executar_agendador, daemon=True).start()
-    painel.mainloop()
 
+# Abrir a interface de configuração ao iniciar
 abrir_painel_configuracao()
+
+# Iniciar o loop principal do Tkinter
+root.mainloop()
