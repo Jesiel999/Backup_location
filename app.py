@@ -8,8 +8,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import psutil
 import customtkinter as ctk
-import re
-
+import re   
 
 source_dir = None
 backup_zip_dir = None
@@ -19,11 +18,11 @@ status_label = None
 progress_bar = None
 painel = None
 cpu_label = None
-mem_label = None
+mem_label = None            
 backup_pid = None 
 
-def atualizar_monitoramento():
-    """Atualiza o uso de CPU e memória do processo do backup na interface."""
+def salvar_log_processamento():
+    """Salva log de uso de CPU e memória a cada 10 segundos."""
     global backup_pid
 
     if backup_pid:
@@ -32,45 +31,66 @@ def atualizar_monitoramento():
             uso_cpu = processo.cpu_percent(interval=1)
             uso_memoria = processo.memory_info().rss / (1024 * 1024) 
 
-            cpu_label.config(text=f"CPU : {uso_cpu:.2f}%", fg="red" if uso_cpu > 80 else "black")
-            mem_label.config(text=f"Memória : {uso_memoria:.2f} MB", fg="red" if uso_memoria > 500 else "black")
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            log_path = os.path.join(script_dir, "backup_processamento_log.txt")
+
+            with open(log_path, "a") as log_file:
+                log_file.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - CPU: {uso_cpu:.2f}% | Memória: {uso_memoria:.2f} MB\n")
 
         except psutil.NoSuchProcess:
-            cpu_label.config(text="CPU : N/A", fg="black")
-            mem_label.config(text="Memória : N/A", fg="black")
-            backup_pid = None 
+            pass 
+
+    painel.after(10000, salvar_log_processamento)
+
+def atualizar_monitoramento():
+    """Atualiza o uso de CPU e memória na interface e inicia o log de processamento."""
+    global backup_pid
+
+    if backup_pid:
+        try:
+            processo = psutil.Process(backup_pid)
+            uso_cpu = processo.cpu_percent(interval=1)
+            uso_memoria = processo.memory_info().rss / (1024 * 1024)  
+
+            cpu_label.config(text=f"CPU: {uso_cpu:.2f}%", fg="red" if uso_cpu > 80 else "black")
+            mem_label.config(text=f"Memória: {uso_memoria:.2f} MB", fg="red" if uso_memoria > 500 else "black")
+
+        except psutil.NoSuchProcess:
+            cpu_label.config(text="CPU: N/A", fg="black")
+            mem_label.config(text="Memória: N/A", fg="black")
+            backup_pid = None  
 
     painel.after(1000, atualizar_monitoramento) 
 
-def abrir_painel_status():
+def abrir_painel_status(backup_horario):
     global status_label, progress_bar, progress_label, painel, cpu_label, mem_label
 
+    if painel:
+        painel.destroy()
+
     painel = tk.Toplevel()
-    # painel.iconbitmap('assents/memory-card.png') #alterar
+    painel.iconbitmap('assets/icon.ico')
     painel.title("Backup")
     painel.configure(bg="#f0f0f0")
+    painel.geometry("250x300")
 
-    largura_tela = painel.winfo_screenwidth()
-    altura_tela = painel.winfo_screenheight()
-    largura_painel = 230
-    altura_painel = 550
-    x_pos = largura_tela - largura_painel - 10 
-    y_pos = altura_tela - altura_painel - 50  
-    painel.geometry(f"{largura_painel}x{altura_painel}+{x_pos}+{y_pos}")
+    tk.Label(painel, text="Status do Backup", font=("Arial", 12, "bold"), bg="#f0f0f0").pack(pady=10)
 
-    status_label = tk.Label(painel, text=backup_status, font=("Arial", 12), bg="#f0f0f0")
-    status_label.pack(pady=10)
+    status_label = tk.Label(painel, text=backup_status, font=("Arial", 10), bg="#f0f0f0")
+    status_label.pack()
 
-    progress_bar = ttk.Progressbar(painel, orient="vertical", length=400, mode="determinate")
-    progress_bar.pack(pady=10, fill='y', expand=True)
-    
+    tk.Label(painel, text=f"Próximo backup: {backup_horario}", font=("Arial", 10, "bold"), bg="#f0f0f0").pack(pady=5)
+
+    progress_bar = ttk.Progressbar(painel, orient="horizontal", length=200, mode="determinate")
+    progress_bar.pack(pady=10)
+
     progress_label = tk.Label(painel, text="0%", font=("Arial", 10), bg="#f0f0f0")
     progress_label.pack()
 
-    cpu_label = tk.Label(painel, text="Uso da CPU: 0%", font=("Arial", 10), bg="#f0f0f0")
+    cpu_label = tk.Label(painel, text="CPU: 0%", font=("Arial", 10), bg="#f0f0f0")
     cpu_label.pack()
 
-    mem_label = tk.Label(painel, text="Uso da Memória: 0%", font=("Arial", 10), bg="#f0f0f0")
+    mem_label = tk.Label(painel, text="Memória: 0MB", font=("Arial", 10), bg="#f0f0f0")
     mem_label.pack()
 
     atualizar_monitoramento()
@@ -103,7 +123,7 @@ def configurar_backup():
         messagebox.showerror("Erro", "Todos os campos devem ser preenchidos!")
         return
 
-    # Validação do formato do horário (HH:MM)
+    ''
     if not re.match(r'^\d{2}:\d{2}$', backup_time):
         messagebox.showerror("Erro", "Formato do horário inválido! Use HH:MM")
         return
@@ -116,27 +136,28 @@ def configurar_backup():
     messagebox.showinfo("Sucesso", backup_status)
     abrir_painel_status()
 
-    # Garante que o agendador está rodando
+    
     threading.Thread(target=executar_agendador, daemon=True).start()
 
-from datetime import datetime, timedelta
-
 def iniciar_backup():
-    global backup_time
+    global backup_time, backup_status
 
     if not source_dir or not backup_zip_dir:
         messagebox.showerror("Erro", "Configure os diretórios primeiro!")
         return
 
-    abrir_painel_status()
-    threading.Thread(target=realizar_backup, daemon=True).start()
-
     now = datetime.now()
     backup_time = now.strftime("%H:%M")  
 
+    backup_status = f"Backup iniciado às {backup_time}!"
+    salvar_log(f"Backup manual iniciado às {backup_time}. Agendado diariamente.")
+
+    abrir_painel_status(backup_time)
+
+    threading.Thread(target=realizar_backup, daemon=True).start()
+
     schedule.clear()
     schedule.every().day.at(backup_time).do(realizar_backup)
-    salvar_log(f"Próximo backup agendado: {backup_time} ")
 
 def realizar_backup():
     global backup_status, backup_pid
@@ -156,6 +177,8 @@ def realizar_backup():
     progress_bar["value"] = 0 
     progress_bar.config(maximum=total_files)
 
+    salvar_log_processamento()
+
     with zipfile.ZipFile(backup_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for i, file_path in enumerate(files_to_backup):
             zipf.write(file_path, os.path.relpath(file_path, source_dir))
@@ -168,15 +191,16 @@ def realizar_backup():
     manter_apenas_tres_backups()
     salvar_log(f"Backup concluído: {backup_zip_path}")
     atualizar_status("Backup concluído!")
+
     painel.after(5000, resetar_interface)
     status_label.config(text=backup_status)
     progress_label.config(text="100%")
     progress_bar["value"] = 5000
 
-    painel.after(5000, painel.destroy) 
-    
+    painel.after(5000, painel.destroy)  
+
 def resetar_interface():
-    # painel.iconbitmap('assents/memory-card.png') #alterar
+    painel.iconbitmap('assets/icon.ico') 
     progress_bar["value"] = 0
     atualizar_status(f"Backup agendado: {backup_time}")
 
@@ -197,22 +221,21 @@ def manter_apenas_tres_backups():
 def salvar_log(mensagem):
     
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    log_path = os.path.join(script_dir, "backup_log.txt")  # Caminho do log no mesmo diretório do app.py
-
+    log_path = os.path.join(script_dir, "backup_log.txt")  
     with open(log_path, "a") as log_file:
         log_file.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {mensagem}\n")
 
 def executar_agendador():
     while True:
-        schedule.run_pending()  # Executa tarefas agendadas
-        time.sleep(30)  # Reduz a carga na CPU
+        schedule.run_pending()
+        time.sleep(30)  
 
 
 
 def abrir_painel_configuracao():
     global painel, origem_entry, destino_entry, horario_entry
     painel = tk.Toplevel()
-    # painel.iconbitmap('assents/memory-card.png') #alterar
+    painel.iconbitmap('assets/icon.ico') 
     painel.title("BACKUP")
     painel.geometry("300x370")
     painel.configure(bg="#ffffff")
