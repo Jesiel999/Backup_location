@@ -1,14 +1,16 @@
 import os
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 import threading
 import schedule
 import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import psutil
+import customtkinter as ctk
+import re
 
-# Variáveis globais
+
 source_dir = None
 backup_zip_dir = None
 backup_time = None
@@ -18,7 +20,7 @@ progress_bar = None
 painel = None
 cpu_label = None
 mem_label = None
-backup_pid = None  # Armazena o PID do processo do backup
+backup_pid = None 
 
 def atualizar_monitoramento():
     """Atualiza o uso de CPU e memória do processo do backup na interface."""
@@ -28,7 +30,7 @@ def atualizar_monitoramento():
         try:
             processo = psutil.Process(backup_pid)
             uso_cpu = processo.cpu_percent(interval=1)
-            uso_memoria = processo.memory_info().rss / (1024 * 1024)  # Convertendo bytes para MB
+            uso_memoria = processo.memory_info().rss / (1024 * 1024) 
 
             cpu_label.config(text=f"CPU : {uso_cpu:.2f}%", fg="red" if uso_cpu > 80 else "black")
             mem_label.config(text=f"Memória : {uso_memoria:.2f} MB", fg="red" if uso_memoria > 500 else "black")
@@ -36,24 +38,24 @@ def atualizar_monitoramento():
         except psutil.NoSuchProcess:
             cpu_label.config(text="CPU : N/A", fg="black")
             mem_label.config(text="Memória : N/A", fg="black")
-            backup_pid = None  # Resetar se o processo não existir mais
+            backup_pid = None 
 
-    painel.after(1000, atualizar_monitoramento)  # Atualiza a cada 1 segundo
+    painel.after(1000, atualizar_monitoramento) 
 
 def abrir_painel_status():
     global status_label, progress_bar, progress_label, painel, cpu_label, mem_label
 
     painel = tk.Toplevel()
-    painel.title("Status do Backup")
+    painel.iconbitmap('assents/memory-card.png') #alterar
+    painel.title("Backup")
     painel.configure(bg="#f0f0f0")
 
-    # Obtendo o tamanho da tela
     largura_tela = painel.winfo_screenwidth()
     altura_tela = painel.winfo_screenheight()
-    largura_painel = 200
+    largura_painel = 230
     altura_painel = 550
-    x_pos = largura_tela - largura_painel - 10  # 10px de margem
-    y_pos = altura_tela - altura_painel - 50  # 50px de margem
+    x_pos = largura_tela - largura_painel - 10 
+    y_pos = altura_tela - altura_painel - 50  
     painel.geometry(f"{largura_painel}x{altura_painel}+{x_pos}+{y_pos}")
 
     status_label = tk.Label(painel, text=backup_status, font=("Arial", 12), bg="#f0f0f0")
@@ -95,10 +97,15 @@ def selecionar_destino():
 
 def configurar_backup():
     global backup_time, backup_status, painel
-    backup_time = horario_entry.get()
+    backup_time = horario_entry.get().strip()
 
     if not source_dir or not backup_zip_dir or not backup_time:
         messagebox.showerror("Erro", "Todos os campos devem ser preenchidos!")
+        return
+
+    # Validação do formato do horário (HH:MM)
+    if not re.match(r'^\d{2}:\d{2}$', backup_time):
+        messagebox.showerror("Erro", "Formato do horário inválido! Use HH:MM")
         return
 
     os.makedirs(backup_zip_dir, exist_ok=True)
@@ -109,16 +116,31 @@ def configurar_backup():
     messagebox.showinfo("Sucesso", backup_status)
     abrir_painel_status()
 
+    # Garante que o agendador está rodando
+    threading.Thread(target=executar_agendador, daemon=True).start()
+
+from datetime import datetime, timedelta
+
 def iniciar_backup():
+    global backup_time
+
     if not source_dir or not backup_zip_dir:
         messagebox.showerror("Erro", "Configure os diretórios primeiro!")
         return
+
     abrir_painel_status()
     threading.Thread(target=realizar_backup, daemon=True).start()
 
+    now = datetime.now()
+    backup_time = now.strftime("%H:%M")  
+
+    schedule.clear()
+    schedule.every().day.at(backup_time).do(realizar_backup)
+    salvar_log(f"Próximo backup agendado: {backup_time} ")
+
 def realizar_backup():
     global backup_status, backup_pid
-    backup_pid = os.getpid()  # Armazena o PID do processo
+    backup_pid = os.getpid()  
 
     atualizar_status("Backup em andamento...")
     status_label.config(text=backup_status)
@@ -131,7 +153,7 @@ def realizar_backup():
     files_to_backup = [os.path.join(root, file) for root, _, files in os.walk(source_dir) for file in files]
     total_files = len(files_to_backup)
 
-    progress_bar["value"] = 0  # Garante que a barra comece do zero
+    progress_bar["value"] = 0 
     progress_bar.config(maximum=total_files)
 
     with zipfile.ZipFile(backup_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
@@ -141,7 +163,7 @@ def realizar_backup():
             status_label.config(text=f"{i+1}/{total_files}")
             status_label.update()
             atualizar_progresso(i + 1, total_files)
-            painel.update_idletasks()  # Garante que a interface seja atualizada corretamente
+            painel.update_idletasks()  
 
     manter_apenas_tres_backups()
     salvar_log(f"Backup concluído: {backup_zip_path}")
@@ -150,8 +172,11 @@ def realizar_backup():
     status_label.config(text=backup_status)
     progress_label.config(text="100%")
     progress_bar["value"] = 5000
+
+    painel.after(5000, painel.destroy) 
     
 def resetar_interface():
+    painel.iconbitmap('assents/memory-card.png') #alterar
     progress_bar["value"] = 0
     atualizar_status(f"Backup agendado: {backup_time}")
 
@@ -170,42 +195,53 @@ def manter_apenas_tres_backups():
         os.remove(os.path.join(backup_zip_dir, backup_files.pop()))
 
 def salvar_log(mensagem):
-    log_path = os.path.join(backup_zip_dir, "backup_log.txt")
+    
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    log_path = os.path.join(script_dir, "backup_log.txt")  # Caminho do log no mesmo diretório do app.py
+
     with open(log_path, "a") as log_file:
         log_file.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {mensagem}\n")
 
 def executar_agendador():
     while True:
-        schedule.run_pending()
-        time.sleep(60)
+        schedule.run_pending()  # Executa tarefas agendadas
+        time.sleep(30)  # Reduz a carga na CPU
+
+
 
 def abrir_painel_configuracao():
     global painel, origem_entry, destino_entry, horario_entry
     painel = tk.Toplevel()
-    painel.title("Painel de Backup")
-    painel.geometry("400x300")
+    painel.iconbitmap('assents/memory-card.png') #alterar
+    painel.title("BACKUP")
+    painel.geometry("300x370")
     painel.configure(bg="#ffffff")
 
-    tk.Label(painel, text="Diretório de Origem:", bg="#ffffff", font=("Arial", 10, "bold")).pack()
-    origem_entry = tk.Entry(painel, width=50)
-    origem_entry.pack()
-    tk.Button(painel, text="Selecionar", command=selecionar_origem, bg="#4CAF50", fg="white").pack(pady=5)
+    tk.Label(painel, text="Diretório de Origem:", bg="#ffffff", font=("Arial", 10, "bold"), fg="#333333").pack(pady=(10, 2))
+    origem_entry = ctk.CTkEntry(painel, width=200, font=("Arial", 10), fg_color="#f8f8f8", text_color="#333333",
+                                corner_radius=10, border_width=2, border_color="#cccccc")
+    origem_entry.pack(pady=5)
+    ctk.CTkButton(painel, text="Selecionar", command=selecionar_origem, fg_color="#303030", 
+                  text_color="white", corner_radius=10).pack(pady=2)
 
-    tk.Label(painel, text="Diretório de Destino:", bg="#ffffff", font=("Arial", 10, "bold")).pack()
-    destino_entry = tk.Entry(painel, width=50)
-    destino_entry.pack()
-    tk.Button(painel, text="Selecionar", command=selecionar_destino, bg="#4CAF50", fg="white").pack(pady=5)
+    tk.Label(painel, text="Diretório de Destino:", bg="#ffffff", font=("Arial", 10, "bold"), fg="#333333").pack(pady=(10, 2))
+    destino_entry = ctk.CTkEntry(painel, width=200, font=("Arial", 10), fg_color="#f8f8f8", text_color="#333333",
+                                 corner_radius=10, border_width=2, border_color="#cccccc")
+    destino_entry.pack(pady=5)
+    ctk.CTkButton(painel, text="Selecionar", command=selecionar_destino, fg_color="#303030", 
+                  text_color="white", corner_radius=10).pack(pady=2)
 
-    tk.Label(painel, text="Horário do Backup (HH:MM):", bg="#ffffff", font=("Arial", 10, "bold")).pack()
-    horario_entry = tk.Entry(painel, width=10)
-    horario_entry.pack()
+    tk.Label(painel, text="Horário do Backup (HH:MM):", bg="#ffffff", font=("Arial", 10, "bold"), fg="#333333").pack(pady=(10, 2))
+    horario_entry = ctk.CTkEntry(painel, width=100, font=("Arial", 10), fg_color="#f8f8f8", text_color="#333333",
+                                 corner_radius=10, border_width=2, border_color="#cccccc")
+    horario_entry.pack(pady=5)
 
-    tk.Button(painel, text="Configurar Backup", command=configurar_backup, bg="#2196F3", fg="white").pack(pady=5)
-    tk.Button(painel, text="Iniciar Backup Agora", command=iniciar_backup, bg="#FF5722", fg="white").pack(pady=5)
-    threading.Thread(target=executar_agendador, daemon=True).start()
+    ctk.CTkButton(painel, text="Configurar Backup", command=configurar_backup, fg_color="#000000", 
+                  text_color="white", corner_radius=10).pack(pady=5)
+    ctk.CTkButton(painel, text="Iniciar Backup Agora", command=iniciar_backup, fg_color="#000000", 
+                  text_color="white", corner_radius=10).pack(pady=5)
 
 
-# Criando a janela principal
 root = tk.Tk()
 root.withdraw()
 abrir_painel_configuracao()
