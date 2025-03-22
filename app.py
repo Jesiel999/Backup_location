@@ -46,7 +46,7 @@ def abrir_painel_status():
     global status_label, progress_bar, progress_label, painel, cpu_label, mem_label
 
     painel = tk.Toplevel()
-    painel.iconbitmap('assents/memory-card.png') #alterar
+    # painel.iconbitmap('assents/memory-card.png') #alterar
     painel.title("Backup")
     painel.configure(bg="#f0f0f0")
 
@@ -176,7 +176,7 @@ def realizar_backup():
     painel.after(5000, painel.destroy) 
     
 def resetar_interface():
-    painel.iconbitmap('assents/memory-card.png') #alterar
+    # painel.iconbitmap('assents/memory-card.png') #alterar
     progress_bar["value"] = 0
     atualizar_status(f"Backup agendado: {backup_time}")
 
@@ -212,7 +212,7 @@ def executar_agendador():
 def abrir_painel_configuracao():
     global painel, origem_entry, destino_entry, horario_entry
     painel = tk.Toplevel()
-    painel.iconbitmap('assents/memory-card.png') #alterar
+    # painel.iconbitmap('assents/memory-card.png') #alterar
     painel.title("BACKUP")
     painel.geometry("300x370")
     painel.configure(bg="#ffffff")
