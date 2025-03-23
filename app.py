@@ -21,6 +21,7 @@ cpu_label = None
 mem_label = None            
 backup_pid = None 
 
+
 def salvar_log_processamento():
     """Salva log de uso de CPU e memória a cada 10 segundos."""
     global backup_pid
