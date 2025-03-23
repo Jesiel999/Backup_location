@@ -123,7 +123,6 @@ def configurar_backup():
         messagebox.showerror("Erro", "Todos os campos devem ser preenchidos!")
         return
 
-    ''
     if not re.match(r'^\d{2}:\d{2}$', backup_time):
         messagebox.showerror("Erro", "Formato do horário inválido! Use HH:MM")
         return
@@ -134,9 +133,8 @@ def configurar_backup():
 
     backup_status = f"Backup agendado: {backup_time}!"
     messagebox.showinfo("Sucesso", backup_status)
-    abrir_painel_status()
+    abrir_painel_status(backup_time)
 
-    
     threading.Thread(target=executar_agendador, daemon=True).start()
 
 def iniciar_backup():
