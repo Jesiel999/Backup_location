@@ -8,7 +8,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import psutil
 import customtkinter as ctk
-import re   
+import re
+import sys
 
 source_dir = None
 backup_zip_dir = None
@@ -33,7 +34,7 @@ def salvar_log_processamento():
             uso_memoria = processo.memory_info().rss / (1024 * 1024) 
 
             script_dir = os.path.dirname(os.path.abspath(__file__))
-            log_path = os.path.join(script_dir, "backup_processamento_log.txt")
+            log_path = os.path.join(script_dir, "assets\log.txt")
 
             with open(log_path, "a") as log_file:
                 log_file.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - CPU: {uso_cpu:.2f}% | Memória: {uso_memoria:.2f} MB\n")
@@ -133,6 +134,7 @@ def configurar_backup():
     schedule.every().day.at(backup_time).do(realizar_backup)
 
     backup_status = f"Backup agendado: {backup_time}!"
+    salvar_log(f"Backup agendado para {backup_time}.")  # Aqui você salva o log do agendamento
     messagebox.showinfo("Sucesso", backup_status)
     abrir_painel_status(backup_time)
 
@@ -149,7 +151,7 @@ def iniciar_backup():
     backup_time = now.strftime("%H:%M")  
 
     backup_status = f"Backup iniciado às {backup_time}!"
-    salvar_log(f"Backup manual iniciado às {backup_time}. Agendado diariamente.")
+    salvar_log(f"Backup manual iniciado às {backup_time}.")  # Aqui você salva o log do início do backup
 
     abrir_painel_status(backup_time)
 
@@ -189,8 +191,8 @@ def realizar_backup():
             painel.update_idletasks()  
 
     manter_apenas_tres_backups()
-    salvar_log(f"Backup concluído: {backup_zip_path}")
-    atualizar_status("Backup concluído!")
+    salvar_log(f"Backup concluido: {backup_zip_path}")
+    atualizar_status("Backup concluido!")
 
     painel.after(5000, resetar_interface)
     status_label.config(text=backup_status)
@@ -219,9 +221,18 @@ def manter_apenas_tres_backups():
         os.remove(os.path.join(backup_zip_dir, backup_files.pop()))
 
 def salvar_log(mensagem):
+    print(f"Salvando log: {mensagem}") 
+
+    if getattr(sys, 'frozen', False):
+        log_path = os.path.join(sys._MEIPASS, "assets\log.txt")  
+    else:
+        script_dir = os.path.dirname(os.path.abspath(__file__)) 
+        log_path = os.path.join(script_dir, "assets\log.txt")
     
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    log_path = os.path.join(script_dir, "backup_log.txt")  
+    log_dir = os.path.dirname(log_path)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
+
     with open(log_path, "a") as log_file:
         log_file.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {mensagem}\n")
 
