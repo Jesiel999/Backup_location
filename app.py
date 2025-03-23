@@ -161,6 +161,7 @@ def realizar_backup():
     global backup_status, backup_pid
     backup_pid = os.getpid()  
 
+    salvar_log("Iniciando backup...") 
     atualizar_status("Backup em andamento...")
     status_label.config(text=backup_status)
     status_label.update()
@@ -227,8 +228,6 @@ def executar_agendador():
     while True:
         schedule.run_pending()
         time.sleep(30)  
-
-
 
 def abrir_painel_configuracao():
     global painel, origem_entry, destino_entry, horario_entry
